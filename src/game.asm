@@ -31,7 +31,7 @@ turn db 0
 colHeaders db    '       1   2   3   4   5   6   7   8   9', 0ah, '$'
 lineSeparator db '     +---+---+---+---+---+---+---+---+---+', 0ah, '$'
 cellContainer db       '   |', '$'
-rowHeader db     '  @  ', '$'
+rowHeader db '   @  |','$'
 player1 db 'W'
 player2 db 'B'
 computingTurn db 'Calculando turno', 0ah, '$'
@@ -79,7 +79,7 @@ start_game:
     mov cx, gameBoardSize
     mov si, offset gameBoard
     restart_board:
-        mov [si], 0
+        mov byte ptr [si], 0
         inc si
         loop restart_board
 
@@ -96,36 +96,36 @@ reinit_board:
     ; Player 1 checkers
 
     mov si, offset gameBoard
-    mov [si], 1                        ; First row
-    mov [si+1], 1
-    mov [si+2], 1
-    mov [si+3], 1
+    mov byte ptr [si], 1                        ; First row
+    mov byte ptr [si+1], 1
+    mov byte ptr [si+2], 1
+    mov byte ptr [si+3], 1
 
-    mov [si+9], 1                      ; Second row
-    mov [si+10], 1
-    mov [si+11], 1
+    mov byte ptr [si+9], 1                      ; Second row
+    mov byte ptr [si+0a], 1
+    mov byte ptr [si+0b], 1
 
-    mov [si+18], 1                     ; Third row
-    mov [si+19], 1
+    mov byte ptr [si+12], 1                     ; Third row
+    mov byte ptr [si+13], 1
 
-    mov [si+27], 1                     ; Fourth row
+    mov byte ptr [si+1b], 1                     ; Fourth row
 
     ; Player 2 checkers
 
     mov si, offset gameBoard
-    mov [si+53], 2                     ; First row
+    mov byte ptr [si+35], 2                     ; First row
 
-    mov [si+61], 2                     ; Second row
-    mov [si+62], 2
+    mov byte ptr [si+3d], 2                     ; Second row
+    mov byte ptr [si+3e], 2
 
-    mov [si+69], 2                     ; Third row
-    mov [si+70], 2
-    mov [si+71], 2
+    mov byte ptr [si+45], 2                     ; Third row
+    mov byte ptr [si+46], 2
+    mov byte ptr [si+47], 2
 
-    mov [si+77], 2                     ; Fourth row
-    mov [si+78], 2
-    mov [si+79], 2
-    mov [si+80], 2
+    mov byte ptr [si+4d], 2                     ; Fourth row
+    mov byte ptr [si+4e], 2
+    mov byte ptr [si+4f], 2
+    mov byte ptr [si+50], 2
 
     ret
 
@@ -181,13 +181,13 @@ show_board:
             jmp print_cell_value
         
         player1_cell:
-            mov al, [offset player1] ; Get the player 1 symbol
+            mov al, player1 ; Get the player 1 symbol
             mov [bx], al ; Save the symbol
             dec bx ; Move to the start of the cell container
             jmp print_cell_value
 
         player2_cell:
-            mov al, [offset player2] ; Get the player 2 symbol
+            mov al, player2 ; Get the player 2 symbol
             mov [bx], al ; Save the symbol
             dec bx ; Move to the start of the cell container
             jmp print_cell_value
