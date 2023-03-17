@@ -1,3 +1,5 @@
+include macros.asm
+
 .model small
 .stack
 .radix 16
@@ -18,12 +20,16 @@ gameBoard db 81 dup(0)
 gameBoardSize equ $-gameBoard
 turn db 1
 commandBuffer db 258 dup(0ff)
+checkerInitialIndex db 0 ; sa
 
 colHeaders db    "       1   2   3   4   5   6   7   8   9", 0ah, "$"
 lineSeparator db "      +---+---+---+---+---+---+---+---+---+", 0ah, "$"
 cellContainer db       "   |", "$"
 rowHeader db "   @  |","$"
 player1 db "B"
+
+
+
 player2 db "W"
 computingTurn db "Calculando turno...", 0ah, "$"
 player1InitialTurn db "Empieza el jugador 1", 0dh, 0ah, "$"
@@ -41,20 +47,12 @@ invalidChecker db "Pieza invalida", 0dh, 0ah, "$"
 .startup
     
     startMenu: 
-        mov dx, offset initialMessage      ; Show initial message
-        mov ah, 09h                        
-        int 21h
+        mPrint initialMessage      ; Show initial message
+        call press_enter           ; Wait for enter
 
-        call press_enter                   ; Wait for enter
+        mPrint newLine
 
-        mov dx, offset newLine
-        mov ah, 09h
-        int 21h
-
-        mov dx, offset initialMenu         ; Show the initial menu
-        mov ah, 09h                        
-        int 21h
-    
+        mPrint initialMenu         ; Show the initial menu
 
         mov ah, 08h                         ; Get the option
         int 21h
@@ -71,9 +69,7 @@ invalidChecker db "Pieza invalida", 0dh, 0ah, "$"
 
 
 start_game:
-    mov DX, offset computingTurn
-    mov AH, 09h
-    int 21h
+    mPrint computingTurn
     ; Get the turn
 
     mov ah, 2ch ; get random number seed
@@ -110,17 +106,13 @@ start_game:
 
 player1_initial_turn:
     mov [turn], 1
-    mov dx, offset player1InitialTurn
-    mov ah, 09h
-    int 21h
+    mPrint player1InitialTurn
     jmp pending_start
                         
 
 player_2_initial_turn:
     mov [turn], 2
-    mov dx, offset player2InitialTurn
-    mov ah, 09h
-    int 21h
+    mPrint player2InitialTurn
     jmp pending_start
 
 reinit_board:
@@ -174,24 +166,17 @@ game_sequence:
 
 
     player_1_turn:
-        mov dx, offset player1Turn
-        mov ah, 09h
-        int 21h
+        mPrint player1Turn
 
         jmp command_request
 
     player_2_turn:
-        mov dx, offset player2Turn
-        mov ah, 09h
-        int 21h
+        mPrint player2Turn
 
         jmp command_request
 
     command_request:
-        mov dx, offset checkerMoveRequest ; Show the command request
-        mov ah, 09h
-        int 21h
-
+        mPrint checkerMoveRequest ; Show the command request
         
         mov dx, offset commandBuffer ; Get the command
         mov ah, 0ah
@@ -238,11 +223,10 @@ game_sequence:
             cmp al, ah ; Compare the value with the turncls
             jne invalid_checker ; If they are different, it is an invalid checker
 
+            mov [checkerInitialIndex], al ; save the initial index
 
         destination_request:
-            mov dx, offset checkerDestinationRequest
-            mov ah, 09h
-            int 21h
+            mPrint checkerDestinationRequest
 
             jmp end_game
 
@@ -287,27 +271,21 @@ game_sequence:
             ret
 
         invalid_position:
-            mov dx, offset invalidPosition
-            mov ah, 09h
-            int 21h
+            mPrint invalidPosition
 
             call press_enter
 
             jmp game_sequence
 
         invalid_checker:
-            mov dx, offset invalidChecker
-            mov ah, 09h
-            int 21h
+            mPrint invalidChecker
 
             call press_enter
 
             jmp game_sequence
 
         invalid_command:
-            mov dx, offset invalidCommand
-            mov ah, 09h
-            int 21h
+            mPrint invalidCommand
 
             call press_enter
 
@@ -325,14 +303,10 @@ game_sequence:
 
 show_board:
     ; Col headers
-    mov dx, offset colHeaders
-    mov ah, 09h
-    int 21h
+    mPrint colHeaders
 
     ; Line separator
-    mov dx, offset lineSeparator
-    mov ah, 09h
-    int 21h
+    mPrint lineSeparator
 
     ; Board
     mov di, 0 ; Cell counter
@@ -399,13 +373,9 @@ show_board:
             inc di ; Next cell
             loop print_cell
 
-            mov dx, offset newLine ; Print the new line
-            mov ah, 09h
-            int 21h
+            mPrint newLine ; Print the new line
 
-            mov dx, offset lineSeparator ; Print the line separator
-            mov ah, 09h
-            int 21h
+            mPrint lineSeparator ; Print the line separator
 
             pop cx ; Restore the row counter
             loop print_line
