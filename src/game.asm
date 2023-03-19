@@ -25,8 +25,14 @@ commandBuffer db 258 dup(0ff)
 checkerInitialRow db 0
 checkerInitialColumn db 0 
 
+auxCheckerInitialRow db 0
+auxCheckerInitialColumn db 0
+
 checkerDestinationRow db 0
 checkerDestinationColumn db 0
+
+lastCommmandAddress dw 0
+commandSize db 0
 
 ; Board
 colHeaders db    "       1   2   3   4   5   6   7   8   9", 0ah, "$"
@@ -121,7 +127,6 @@ player_2_initial_turn:
     mov [turn], 2
     mPrint player2InitialTurn
     jmp pending_start
-
 reinit_board:
     ; Player 1 checkers
 
@@ -212,6 +217,9 @@ game_sequence:
             mov [checkerInitialRow], al 
             mov [checkerInitialColumn], ah 
 
+            mov [auxCheckerInitialRow], al 
+            mov [auxCheckerInitialColumn], ah 
+
             ; ? Validate if there is a checker in the position
             is_own_checker:
                 mov dx, offset gameBoard
@@ -235,6 +243,8 @@ game_sequence:
             
             mov bx, offset commandBuffer
             inc bx ; skip, max chars and char counter
+            mov al, [bx] ; Get the size
+            mov [commandSize], al ; Save the size of the command
             inc bx ; Move to the first character
 
             eval_jump:
@@ -261,10 +271,40 @@ game_sequence:
                 je invalid_destination
 
                 cmp dl, 1 ; Direct jump
-                je move_checker
+                je direct_jump_validation
 
-                ; Recursive jump
-                call press_enter
+                cmp dl, 2 ; Multiple jump
+                je multiple_jump_validation
+              
+                direct_jump_validation:
+                    cmp [commandSize], 2 ; Check if the size is 2
+                    je move_checker
+                    jmp invalid_destination
+
+                multiple_jump_validation:
+                    cmp [commandSize], 2 ; Do the jump
+                    je move_checker
+
+                    ; recursive call
+                    ; Comma validation
+                    mov bx, [lastCommmandAddress]
+                    inc bx ; Move to the comma
+                    mov al, [bx]
+                    cmp al, 2c ; Check if the character is a comma
+                    jne invalid_destination
+
+                    mov al, [checkerDestinationRow]
+                    mov [auxCheckerInitialRow], al
+
+                    mov al, [checkerDestinationColumn]
+                    mov [auxCheckerInitialColumn], al
+
+                    mov al, [commandSize]
+                    sub al, 3 ; skip destination and comma
+                    mov [commandSize], al
+
+                    inc bx ; Move to the next character
+                    jmp eval_jump
 
             jmp end_game ; ?
 
@@ -296,6 +336,8 @@ game_sequence:
 
             sub al, 41h ; Convert to 0-8 [For indexing], save in AL
             mov dl, 0 ; No error
+
+            mov [lastCommmandAddress], bx ; save the last command address   
 
             ret
         
@@ -346,9 +388,11 @@ game_sequence:
         ;; Entry - None
         ;; Output - al -> row distance
         ;;          ah -> column distance
+        ;;          bl -> (right -> 1, left -> 0)
+        ;;          bh -> (up -> 1, down -> 0)
         compute_distance:
-            mov al, [checkerInitialRow]
-            mov ah, [checkerInitialColumn]
+            mov al, [auxCheckerInitialRow]
+            mov ah, [auxCheckerInitialColumn]
 
             mov bl, [checkerDestinationRow]
             mov bh, [checkerDestinationColumn]
@@ -356,22 +400,30 @@ game_sequence:
             sub al, bl ; Compute the difference between the rows
             sub ah, bh ; Compute the difference between the columns
 
+            mov bl, 0
+            mov bh, 1
+
             cmp al, 0 ; Check if the difference is negative
             jge positive_row_difference ; If it is positive, continue
 
             neg al ; If it is negative, make it positive
+            mov bh, 0
 
             positive_row_difference:
                 cmp ah, 0 ; Check if the difference is negative
                 jge positive_column_difference ; If it is positive, continue
 
                 neg ah ; If it is negative, make it positive
+                mov bl, 1
 
                 positive_column_difference:
                     ret
 
+
         ;; Entry - al -> row distance
-        ;;          ah -> column distance
+        ;;         ah -> column distance
+        ;;         bl -> (right -> 1, left -> 0)
+        ;;         bh -> (up -> 1, down -> 0)  
         ;; Output - dl -> jump type (0 -> invalid, 1 -> direct, 2 -> multiple)
         validate_jump_type:
 
@@ -393,16 +445,62 @@ game_sequence:
             cmp ah, 2
             je multiple_jump_horizontal
 
-            mov dl, 0 ; Invalid jump
-            ret
+            jmp jump_error
 
             multiple_jump_vertical:
                 cmp ah, 0
-                je multiple_jump
+                jne jump_error
+
+                mov al, [auxCheckerInitialRow]
+                mov ah, [auxCheckerInitialColumn]
+
+                ; Validate intermediate cell
+                cmp bh, 1 ; Check if the jump is up
+                je multiple_jump_up
+
+                multiple_jump_down:
+                    add al, 1 ; Move to the intermediate cell
+                    jmp intermediate_vertical
+
+                multiple_jump_up:
+                    sub al, 1 ; Move to the intermediate cell
+                    jmp intermediate_vertical
+
+                intermediate_vertical:
+                    call compute_index
+                    call is_cell_empty
+                    cmp dl, 0 ; Check if the intermediate cell is not empty
+                    je multiple_jump
+
+                    jmp jump_error
+
 
             multiple_jump_horizontal:
                 cmp al, 0
-                je multiple_jump
+                jne jump_error
+
+                mov al, [auxCheckerInitialRow]
+                mov ah, [auxCheckerInitialColumn]
+
+                ; Validate intermediate cell
+                cmp bl, 1 ; Check if the jump is right
+                je multiple_jump_right
+
+                multiple_jump_left:
+                    sub ah, 1 ; Move to the intermediate cell
+                    jmp intermediate_horizontal
+
+                multiple_jump_right:
+                    add ah, 1 ; Move to the intermediate cell
+                    jmp intermediate_horizontal
+
+                intermediate_horizontal:
+                    call compute_index
+                    call is_cell_empty
+                    cmp dl, 0 ; Check if the intermediate cell is not empty
+                    je multiple_jump
+
+                    jmp jump_error
             
             multiple_jump:
                 mov dl, 2
@@ -418,6 +516,10 @@ game_sequence:
 
             direct_jump:
                 mov dl, 1
+                ret
+
+            jump_error:
+                mov dl, 0 ; Invalid jump
                 ret
 
         ;; Entry - BX -> index
@@ -494,11 +596,6 @@ game_sequence:
             jmp game_sequence
             
 
-    ; TODO : Check if the move is valid
-    ; TODO : Update the board
-    ; TODO : Check if the game is over
-    ; TODO : Change the turn
-    ; TODO : Repeat
 
     jmp end_game
 
