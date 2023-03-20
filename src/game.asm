@@ -21,6 +21,14 @@ gameBoardSize equ $-gameBoard
 turn db 1
 commandBuffer db 258 dup(0ff)
 
+boardFileName db "board.save", 0
+turnFileName db "turn.save", 0
+handleSaveFile dw 0
+
+fileNameRequest db "Nombre del archivo : ", 0ah, 0dh, "$"
+fileCreated db 'Archivo creado', 0ah, 0dh, '$'
+abortGame db 'Juego abandonado', 0ah, 0dh, '$'
+
 ; Checker
 checkerInitialRow db 0
 checkerInitialColumn db 0 
@@ -34,6 +42,12 @@ checkerDestinationColumn db 0
 lastCommmandAddress dw 0
 commandSize db 0
 
+; Commands
+saveCommand db "GUARDAR", 0
+abortCommand db "ABANDONAR", 0
+generatePageCommand db "GENERARPAGINA", 0
+returnCommand db "RETORNAR", 0
+
 ; Board
 colHeaders db    "       1   2   3   4   5   6   7   8   9", 0ah, "$"
 lineSeparator db "      *---*---*---*---*---*---*---*---*---*", 0ah, "$"
@@ -44,8 +58,9 @@ player2 db "W"
 
 ; Messages
 computingTurn db "Calculando turno...", 0ah, "$"
-player1InitialTurn db "Empieza el jugador 1", 0dh, 0ah, "$"
-player2InitialTurn db "Empieza el jugador 2", 0dh, 0ah, "$"
+generatingPage db "Generando pagina...", 0ah, "$"
+player1InitialTurn db "Empieza el jugador 1, con piezas >>B<<", 0dh, 0ah, "$"
+player2InitialTurn db "Empieza el jugador 2, con piezas >>W<<", 0dh, 0ah, "$"
 player1Won db "Gano el jugador 1, con piezas >>B<<", 0dh, 0ah, "$"
 player2Won db "Gano el jugador 2, con piezas >>W<<", 0dh, 0ah, "$"
 player1Turn db "Turno del jugador 1 con piezas >>B<<", 0dh, 0ah, "$"
@@ -78,12 +93,60 @@ invalidDestination db "Destino invalido", 0dh, 0ah, "$"
         je start_game
 
         ; 2 -> Load game
+        cmp AL, 32h
+        je load_game
 
         cmp AL, 33h                         ; 3 -> Exit
         je end_game
 
-        jmp startMenu                       ; Invalid option
+        jmp initial_menu                       ; Invalid option
 
+load_game: 
+
+    ;LOAD BOARD
+
+    ;  open
+    mov CX, 00
+    mov DX, offset boardFileName
+    mov AL, 00
+    mov AH, 3d
+    int 21
+    jc initial_menu
+
+    ;  read
+    mov [handleSaveFile], AX
+    mov BX, AX
+    mov DX, offset gameBoard
+    mov CX, 81
+    mov AH, 3f
+    int 21
+
+    ;  close
+    mov AH, 3e
+    int 21
+
+    ;LOAD TURN
+
+    ;  open
+    mov CX, 00
+    mov DX, offset turnFileName
+    mov AL, 00
+    mov AH, 3d
+    int 21
+    jc initial_menu
+
+    ;  read
+    mov [handleSaveFile], AX
+    mov BX, AX
+    mov DX, offset turn
+    mov CX, 1
+    mov AH, 3f
+    int 21
+
+    ;  close
+    mov AH, 3e
+    int 21
+    jmp game_sequence
 
 start_game:
     mPrint computingTurn
@@ -211,8 +274,9 @@ game_sequence:
 
             cmp al, 2 ; Check if the size is 2 (Coordinates)
             je move_request
-        
-            jne game_command     ; Check if it is a game command
+
+            
+            jmp game_command     ; Check if it is a game command
 
         move_request:
             ; check valid position
@@ -755,8 +819,141 @@ game_sequence:
 ;  ------------------------ Game Commands ------------------------
 
     game_command:
-        jmp end_game
+        
+    ; save
+        call charge_command
+        mov di, offset saveCommand
+        call compare_strings
+        cmp dl, 1 
+        je save_game
 
+    ; abort
+        call charge_command
+        mov di, offset abortCommand
+        call compare_strings
+        cmp dl, 1 
+        je abort_game
+
+    ; generate page
+        call charge_command
+        mov di, offset generatePageCommand
+        call compare_strings
+        cmp dl, 1 
+        je generate_page
+
+    ; return
+        call charge_command
+        mov di, offset returnCommand
+        call compare_strings
+        cmp dl, 1 
+        je game_sequence
+
+
+        jmp invalid_command
+
+
+    charge_command:
+        mov si, offset commandBuffer
+        inc si 
+        inc si
+        ret
+
+    ;   entry : si = offset string1
+    ;           di = offset string2
+    ;   exit  : dl = 1 if the command is valid, 0 otherwise
+    compare_strings:
+        mov cx, 0 ; Counter
+
+        compare:
+            mov al, [si] ; Get the command char
+            mov bl, [di] ; Get the buffer char
+
+            cmp al, bl ; Compare the chars
+            jne strings_not_equal
+
+            inc si ; Next command char
+            inc di ; Next buffer char
+            inc cx ; Next counter
+
+            cmp cx, 4 ; Check if the command is complete
+            jne compare
+
+            mov dl, 1 ; Strings are equal
+            ret
+
+        strings_not_equal:
+            mov dl, 0 ; Strings are not equal
+            ret     
+
+;  ------------------------ Commands calculations -------------------
+
+    save_game:
+
+        ; SAVE THE BOARD
+
+        mov cx, 0
+        mov dx, offset boardFileName
+        mov ah, 3ch
+        int 21h
+        jc initial_menu
+        mov [handleSaveFile], AX
+        mov bx, ax
+
+        mPrint newLine
+        mPrint fileCreated
+
+        ; Write the board
+        mov cx, 51 
+        mov dx, offset gameBoard
+        mov ah, 40h
+        int 21h
+
+        ; Close file
+        mov ah, 3eh
+        int 21h
+
+        mov cx, 0
+        mov dx, offset turnFileName
+        mov ah, 3ch
+        int 21h
+        jc initial_menu
+        mov [handleSaveFile], AX
+        mov bx, ax
+
+        ; SAVE THE TURN
+
+        mov cx, 0
+        mov dx, offset turnFileName
+        mov ah, 3ch
+        int 21h
+        jc initial_menu
+        mov [handleSaveFile], AX
+        mov bx, ax
+
+        mPrint newLine
+        mPrint fileCreated
+
+        ; Write the board
+        mov cx, 1 
+        mov dx, offset turn
+        mov ah, 40h
+        int 21h
+
+        ; Close file
+        mov ah, 3eh
+        int 21h
+
+        call press_enter
+        jmp game_sequence
+
+    abort_game:
+        mPrint newLine
+        mPrint abortGame
+        call press_enter
+        jmp initial_menu
+
+    generate_page:
+        jmp initial_menu
 
 ; ------------------------ Errors ------------------------
     position_error:
@@ -788,7 +985,6 @@ game_sequence:
         mPrint invalidDestination
         call press_enter
         jmp game_sequence
-
 
 
 press_enter:
