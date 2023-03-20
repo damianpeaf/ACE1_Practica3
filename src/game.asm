@@ -36,7 +36,7 @@ commandSize db 0
 
 ; Board
 colHeaders db    "       1   2   3   4   5   6   7   8   9", 0ah, "$"
-lineSeparator db "      +---+---+---+---+---+---+---+---+---+", 0ah, "$"
+lineSeparator db "      *---*---*---*---*---*---*---*---*---*", 0ah, "$"
 cellContainer db       "   |", "$"
 rowHeader db "   @  |","$"
 player1 db "B"
@@ -46,6 +46,8 @@ player2 db "W"
 computingTurn db "Calculando turno...", 0ah, "$"
 player1InitialTurn db "Empieza el jugador 1", 0dh, 0ah, "$"
 player2InitialTurn db "Empieza el jugador 2", 0dh, 0ah, "$"
+player1Won db "Gano el jugador 1, con piezas >>B<<", 0dh, 0ah, "$"
+player2Won db "Gano el jugador 2, con piezas >>W<<", 0dh, 0ah, "$"
 player1Turn db "Turno del jugador 1 con piezas >>B<<", 0dh, 0ah, "$"
 player2Turn db "Turno del jugador 2 con piezas >>W<<", 0dh, 0ah, "$"
 checkerMoveRequest db "Pieza a mover : ", 0dh, 0ah, "$"
@@ -64,6 +66,8 @@ invalidDestination db "Destino invalido", 0dh, 0ah, "$"
         call press_enter           ; Wait for enter
 
         mPrint newLine
+
+        initial_menu:
 
         mPrint initialMenu         ; Show the initial menu
 
@@ -168,6 +172,10 @@ game_sequence:
 
     ;Show the board
     call show_board
+
+    call eval_someone_won
+    cmp dl, 0
+    jne someone_won
 
     ; Show the turn
     cmp turn, 1
@@ -310,382 +318,478 @@ game_sequence:
 
 ;  -----------------------------GAME Calculations-----------------------------
 
-        ;; Entry  - bx -> commandBuffer address of the first character
-        ;; Output - ah -> column
-        ;;          al -> row
-        ;;          dl -> error (0 -> no error, 1 -> error)
-        position_validation: 
-            mov al, [bx] ; Get the first character, [Column, 1-9 -> ASCII 31h-39h]
-            cmp al, 39h ; Compare with 9
-            jg position_error ; If it is greater than 9, it is invalid
+    ;; Entry  - bx -> commandBuffer address of the first character
+    ;; Output - ah -> column
+    ;;          al -> row
+    ;;          dl -> error (0 -> no error, 1 -> error)
+    position_validation: 
+        mov al, [bx] ; Get the first character, [Column, 1-9 -> ASCII 31h-39h]
+        cmp al, 39h ; Compare with 9
+        jg position_error ; If it is greater than 9, it is invalid
 
-            cmp al, 31h ; Compare with 1
-            jl position_error ; If it is less than 1, it is invalid
+        cmp al, 31h ; Compare with 1
+        jl position_error ; If it is less than 1, it is invalid
 
-            sub al, 31h ; Convert to 0-8 [For indexing]
-            mov ah, al ; Save the column in AH
+        sub al, 31h ; Convert to 0-8 [For indexing]
+        mov ah, al ; Save the column in AH
 
-            inc bx ; Move to the second character [Row, A-I -> ASCII 41h-49h]
-            mov al, [bx] ; Get the second character
+        inc bx ; Move to the second character [Row, A-I -> ASCII 41h-49h]
+        mov al, [bx] ; Get the second character
 
-            cmp al, 49h ; Compare with I
-            jg position_error ; If it is greater than I, it is invalid
+        cmp al, 49h ; Compare with I
+        jg position_error ; If it is greater than I, it is invalid
 
-            cmp al, 41h ; Compare with A
-            jl position_error ; If it is less than A, it is invalid
+        cmp al, 41h ; Compare with A
+        jl position_error ; If it is less than A, it is invalid
 
-            sub al, 41h ; Convert to 0-8 [For indexing], save in AL
-            mov dl, 0 ; No error
+        sub al, 41h ; Convert to 0-8 [For indexing], save in AL
+        mov dl, 0 ; No error
 
-            mov [lastCommmandAddress], bx ; save the last command address   
+        mov [lastCommmandAddress], bx ; save the last command address   
 
-            ret
+        ret
+    
+    ;; Entry  - AH -> column
+    ;;          AL -> row
+    ;; Output - BX | BL -> index (Doesnt mutate AH or AL?, but mutates cl)
+    compute_index:
+        ; Compute index -> i = AH + AL * 9 = column + row * 9 
+
+        ; note: mul takes AL * operator = AX, save AH and AL momentarily
+        mov bl, al
+        mov bh, ah
+
+        mov ah, 0 ; reset ah
+        mov cl, 9
+        mul cl
+
+        mov ah, bh ; restore ah once
+        add al, ah ; relative index
+        mov cl, al ; save the index
+
+        mov al, bl ; restore al
+        mov ah, bh ; restore ah
         
-        ;; Entry  - AH -> column
-        ;;          AL -> row
-        ;; Output - BX | BL -> index (Doesnt mutate AH or AL?, but mutates cl)
-        compute_index:
-            ; Compute index -> i = AH + AL * 9 = column + row * 9 
+        mov bx, 0 ; reset bx
+        mov bl, cl ; save the index in bl
+        ret
 
-            ; note: mul takes AL * operator = AX, save AH and AL momentarily
-            mov bl, al
-            mov bh, ah
+    ;; Entry - BX -> index
+    ;; Output - DL -> is empty (1 -> empty, 0 -> not empty)
+    ;; mutates dx, bx, al, dl
+    is_cell_empty:
+        mov dx, offset gameBoard
+        add bx, dx ; Get the address of the position
 
-            mov ah, 0 ; reset ah
-            mov cl, 9
-            mul cl
+        mov al, [bx] ; Get the value of the position
 
-            mov ah, bh ; restore ah once
-            add al, ah ; relative index
-            mov cl, al ; save the index
+        cmp al, 0 ; Check if the value is 0
+        je cell_empty ; If it is 0, it is empty
 
-            mov al, bl ; restore al
-            mov ah, bh ; restore ah
-            
-            mov bx, 0 ; reset bx
-            mov bl, cl ; save the index in bl
+        mov dl, 0 ; 0 for not empty
+        ret
+
+        cell_empty:
+            mov dl, 1 ; 1 for empty
             ret
 
-        ;; Entry - BX -> index
-        ;; Output - DL -> is empty (1 -> empty, 0 -> not empty)
-        ;; mutates dx, bx, al, dl
-        is_cell_empty:
-            mov dx, offset gameBoard
-            add bx, dx ; Get the address of the position
+    ;; Entry - None
+    ;; Output - al -> row distance
+    ;;          ah -> column distance
+    ;;          bl -> (right -> 1, left -> 0)
+    ;;          bh -> (up -> 1, down -> 0)
+    compute_distance:
+        mov al, [auxCheckerInitialRow]
+        mov ah, [auxCheckerInitialColumn]
 
-            mov al, [bx] ; Get the value of the position
+        mov bl, [checkerDestinationRow]
+        mov bh, [checkerDestinationColumn]
 
-            cmp al, 0 ; Check if the value is 0
-            je cell_empty ; If it is 0, it is empty
+        sub al, bl ; Compute the difference between the rows
+        sub ah, bh ; Compute the difference between the columns
 
-            mov dl, 0 ; 0 for not empty
-            ret
+        mov bl, 0
+        mov bh, 1
 
-            cell_empty:
-                mov dl, 1 ; 1 for empty
+        cmp al, 0 ; Check if the difference is negative
+        jge positive_row_difference ; If it is positive, continue
+
+        neg al ; If it is negative, make it positive
+        mov bh, 0
+
+        positive_row_difference:
+            cmp ah, 0 ; Check if the difference is negative
+            jge positive_column_difference ; If it is positive, continue
+
+            neg ah ; If it is negative, make it positive
+            mov bl, 1
+
+            positive_column_difference:
                 ret
 
-        ;; Entry - None
-        ;; Output - al -> row distance
-        ;;          ah -> column distance
-        ;;          bl -> (right -> 1, left -> 0)
-        ;;          bh -> (up -> 1, down -> 0)
-        compute_distance:
+
+    ;; Entry - al -> row distance
+    ;;         ah -> column distance
+    ;;         bl -> (right -> 1, left -> 0)
+    ;;         bh -> (up -> 1, down -> 0)  
+    ;; Output - dl -> jump type (0 -> invalid, 1 -> direct, 2 -> multiple)
+    validate_jump_type:
+
+        ; Direct jump
+        ; 1st case: row_distance 1, column_distance 0 (Vertical)
+        cmp al, 1
+        je direct_jump_vertical
+
+        ; 2nd case: row_distance 0, column_distance 1 (Horizontal)
+        cmp ah, 1
+        je direct_jump_horizontal
+
+        ; Multiple jump
+        ; 1st case: row_distance 2, column_distance 0 (Vertical)
+        cmp al, 2
+        je multiple_jump_vertical
+
+        ; 2nd case: row_distance 0, column_distance 2 (Horizontal)
+        cmp ah, 2
+        je multiple_jump_horizontal
+
+        jmp jump_error
+
+        multiple_jump_vertical:
+            cmp ah, 0
+            jne jump_error
+
             mov al, [auxCheckerInitialRow]
             mov ah, [auxCheckerInitialColumn]
 
-            mov bl, [checkerDestinationRow]
-            mov bh, [checkerDestinationColumn]
+            ; Validate intermediate cell
+            cmp bh, 1 ; Check if the jump is up
+            je multiple_jump_up
 
-            sub al, bl ; Compute the difference between the rows
-            sub ah, bh ; Compute the difference between the columns
+            multiple_jump_down:
+                add al, 1 ; Move to the intermediate cell
+                jmp intermediate_vertical
 
-            mov bl, 0
-            mov bh, 1
+            multiple_jump_up:
+                sub al, 1 ; Move to the intermediate cell
+                jmp intermediate_vertical
 
-            cmp al, 0 ; Check if the difference is negative
-            jge positive_row_difference ; If it is positive, continue
+            intermediate_vertical:
+                call compute_index
+                call is_cell_empty
+                cmp dl, 0 ; Check if the intermediate cell is not empty
+                je multiple_jump
 
-            neg al ; If it is negative, make it positive
-            mov bh, 0
-
-            positive_row_difference:
-                cmp ah, 0 ; Check if the difference is negative
-                jge positive_column_difference ; If it is positive, continue
-
-                neg ah ; If it is negative, make it positive
-                mov bl, 1
-
-                positive_column_difference:
-                    ret
+                jmp jump_error
 
 
-        ;; Entry - al -> row distance
-        ;;         ah -> column distance
-        ;;         bl -> (right -> 1, left -> 0)
-        ;;         bh -> (up -> 1, down -> 0)  
-        ;; Output - dl -> jump type (0 -> invalid, 1 -> direct, 2 -> multiple)
-        validate_jump_type:
+        multiple_jump_horizontal:
+            cmp al, 0
+            jne jump_error
 
-            ; Direct jump
-            ; 1st case: row_distance 1, column_distance 0 (Vertical)
-            cmp al, 1
-            je direct_jump_vertical
+            mov al, [auxCheckerInitialRow]
+            mov ah, [auxCheckerInitialColumn]
 
-            ; 2nd case: row_distance 0, column_distance 1 (Horizontal)
-            cmp ah, 1
-            je direct_jump_horizontal
+            ; Validate intermediate cell
+            cmp bl, 1 ; Check if the jump is right
+            je multiple_jump_right
 
-            ; Multiple jump
-            ; 1st case: row_distance 2, column_distance 0 (Vertical)
-            cmp al, 2
-            je multiple_jump_vertical
+            multiple_jump_left:
+                sub ah, 1 ; Move to the intermediate cell
+                jmp intermediate_horizontal
 
-            ; 2nd case: row_distance 0, column_distance 2 (Horizontal)
-            cmp ah, 2
-            je multiple_jump_horizontal
+            multiple_jump_right:
+                add ah, 1 ; Move to the intermediate cell
+                jmp intermediate_horizontal
 
-            jmp jump_error
+            intermediate_horizontal:
+                call compute_index
+                call is_cell_empty
+                cmp dl, 0 ; Check if the intermediate cell is not empty
+                je multiple_jump
 
-            multiple_jump_vertical:
-                cmp ah, 0
-                jne jump_error
-
-                mov al, [auxCheckerInitialRow]
-                mov ah, [auxCheckerInitialColumn]
-
-                ; Validate intermediate cell
-                cmp bh, 1 ; Check if the jump is up
-                je multiple_jump_up
-
-                multiple_jump_down:
-                    add al, 1 ; Move to the intermediate cell
-                    jmp intermediate_vertical
-
-                multiple_jump_up:
-                    sub al, 1 ; Move to the intermediate cell
-                    jmp intermediate_vertical
-
-                intermediate_vertical:
-                    call compute_index
-                    call is_cell_empty
-                    cmp dl, 0 ; Check if the intermediate cell is not empty
-                    je multiple_jump
-
-                    jmp jump_error
-
-
-            multiple_jump_horizontal:
-                cmp al, 0
-                jne jump_error
-
-                mov al, [auxCheckerInitialRow]
-                mov ah, [auxCheckerInitialColumn]
-
-                ; Validate intermediate cell
-                cmp bl, 1 ; Check if the jump is right
-                je multiple_jump_right
-
-                multiple_jump_left:
-                    sub ah, 1 ; Move to the intermediate cell
-                    jmp intermediate_horizontal
-
-                multiple_jump_right:
-                    add ah, 1 ; Move to the intermediate cell
-                    jmp intermediate_horizontal
-
-                intermediate_horizontal:
-                    call compute_index
-                    call is_cell_empty
-                    cmp dl, 0 ; Check if the intermediate cell is not empty
-                    je multiple_jump
-
-                    jmp jump_error
-            
-            multiple_jump:
-                mov dl, 2
-                ret
-
-            direct_jump_vertical:
-                cmp ah, 0
-                je direct_jump
-
-            direct_jump_horizontal:
-                cmp al, 0
-                je direct_jump
-
-            direct_jump:
-                mov dl, 1
-                ret
-
-            jump_error:
-                mov dl, 0 ; Invalid jump
-                ret
-
-        ;; Entry - BX -> index
-        ;;       - AL -> symbol
-        ;; Output - None
-        set_dasboard_cell:
-            mov dx, offset gameBoard
-            add bx, dx ; Get the address of the position
-            mov [bx], al ; Set the value of the position
+                jmp jump_error
+        
+        multiple_jump:
+            mov dl, 2
             ret
 
-        move_checker:
-            mov al, [checkerInitialRow]
-            mov ah, [checkerInitialColumn]
-            call compute_index
+        direct_jump_vertical:
+            cmp ah, 0
+            je direct_jump
+            jmp jump_error
 
-            mov al, 0 ; Symbol for empty cell
-            call set_dasboard_cell
+        direct_jump_horizontal:
+            cmp al, 0
+            je direct_jump
+            jmp jump_error
 
-            mov al, [checkerDestinationRow]
-            mov ah, [checkerDestinationColumn]
+        direct_jump:
+            mov dl, 1
+            ret
 
-            call compute_index
+        jump_error:
+            mov dl, 0 ; Invalid jump
+            ret
 
+    ;; Entry - BX -> index
+    ;;       - AL -> symbol
+    ;; Output - None
+    set_dasboard_cell:
+        mov dx, offset gameBoard
+        add bx, dx ; Get the address of the position
+        mov [bx], al ; Set the value of the position
+        ret
+
+    move_checker:
+        mov al, [checkerInitialRow]
+        mov ah, [checkerInitialColumn]
+        call compute_index
+
+        mov al, 0 ; Symbol for empty cell
+        call set_dasboard_cell
+
+        mov al, [checkerDestinationRow]
+        mov ah, [checkerDestinationColumn]
+
+        call compute_index
+
+        mov al, [turn]
+        call set_dasboard_cell
+    
+        change_turn:
             mov al, [turn]
-            call set_dasboard_cell
-        
-            change_turn:
-                mov al, [turn]
-                cmp al, 1
-                je change_turn_to_2
+            cmp al, 1
+            je change_turn_to_2
 
-                mov al, 1
+            mov al, 1
+            mov [turn], al
+            jmp game_sequence
+
+            change_turn_to_2:
+                mov al, 2
                 mov [turn], al
                 jmp game_sequence
 
-                change_turn_to_2:
-                    mov al, 2
-                    mov [turn], al
-                    jmp game_sequence
+    ; Entry - None
+    ; Output - dl -> (1|2) -> winner (0 -> no winner)
+    eval_someone_won:
+        mov bx, offset gameBoard
 
+        ; Check if the player 1 won
+        eval_player_1_won:
+            mov al, [bx+35]
+            cmp al, 1
+            jne eval_player_2_won
+            mov al, [bx+3d]
+            cmp al, 1
+            jne eval_player_2_won
+            mov al, [bx+3e]
+            cmp al, 1
+            jne eval_player_2_won
+            mov al, [bx+45]
+            cmp al, 1
+            jne eval_player_2_won
+            mov al, [bx+46]
+            cmp al, 1
+            jne eval_player_2_won
+            mov al, [bx+47]
+            cmp al, 1
+            jne eval_player_2_won
+            mov al, [bx+4d]
+            cmp al, 1
+            jne eval_player_2_won
+            mov al, [bx+4e]
+            cmp al, 1
+            jne eval_player_2_won
+            mov al, [bx+4f]
+            cmp al, 1
+            jne eval_player_2_won
+            mov al, [bx+50]
+            cmp al, 1
+            jne eval_player_2_won
 
-        game_command:
-            jmp end_game
-
-        position_error:
-            mov dl, 1 ; Error
+            mov dl, 1 ; Player 1 won
             ret
 
-        invalid_position:
-            mPrint invalidPosition
+        ; Check if the player 2 won 
+        eval_player_2_won:
+            mov al, [si]
+            cmp al, 2
+            jne noone_won
+            mov al, [si+1]
+            cmp al, 2
+            jne noone_won
+            mov al, [si+2]
+            cmp al, 2
+            jne noone_won
+            mov al, [si+3]
+            cmp al, 2
+            jne noone_won
+            mov al, [si+9]
+            cmp al, 2
+            jne noone_won
+            mov al, [si+0a]
+            cmp al, 2
+            jne noone_won
+            mov al, [si+0b]
+            cmp al, 2
+            jne noone_won
+            mov al, [si+12]
+            cmp al, 2
+            jne noone_won
+            mov al, [si+13]
+            cmp al, 2
+            jne noone_won
+            mov al, [si+1b]
+            cmp al, 2
+            jne noone_won
 
-            call press_enter
+            mov dl, 2 ; Player 2 won
+            ret
 
-            jmp game_sequence
+        ; No one won
+        noone_won:
+            mov dl, 0
+            ret
 
-        invalid_checker:
-            mPrint invalidChecker
+    show_board:
+        ; Col headers
+        mPrint colHeaders
 
-            call press_enter
+        ; Line separator
+        mPrint lineSeparator
 
-            jmp game_sequence
+        ; Board
+        mov di, 0 ; Cell counter
+        mov cx, boardDimension ; Row counter
 
-        invalid_command:
-            mPrint invalidCommand
-
-            call press_enter
-
-            jmp game_sequence
-
-        invalid_destination:
-            mPrint invalidDestination
-            call press_enter
-            jmp game_sequence
+        print_line:
+            ; Row header
+            mov bx, offset rowHeader
+            add bx, 3 ; Move to @ position
             
+            mov al, [bx] ; copy symbol
+            inc al ; Get the next symbol
 
-
-    jmp end_game
-
-
-show_board:
-    ; Col headers
-    mPrint colHeaders
-
-    ; Line separator
-    mPrint lineSeparator
-
-    ; Board
-    mov di, 0 ; Cell counter
-    mov cx, boardDimension ; Row counter
-
-    print_line:
-        ; Row header
-        mov bx, offset rowHeader
-        add bx, 3 ; Move to @ position
-        
-        mov al, [bx] ; copy symbol
-        inc al ; Get the next symbol
-
-        mov [bx], al ; Save the symbol
-        sub bx , 3 ; Move to the start of the row header
-
-        mov dx, bx ; Print the row header
-        mov ah, 09h
-        int 21h
-
-        push cx ; Save the row counter
-        mov cx, boardDimension ; Counter to print the cells
-
-    print_cell:
-        mov al, [di+gameBoard] ; Get the cell value
-        mov bx, offset cellContainer ; Get the cell container
-        inc bx ; Move to the symbol position
-
-        cmp al, 0 ; Empty cell
-        je empty_cell
-
-        cmp al, 1 ; Player 1
-        je player1_cell
-
-        cmp al, 2 ; Player 2
-        je player2_cell
-
-        empty_cell:
-            dec bx ; Move to the start of the cell container
-            jmp print_cell_value
-        
-        player1_cell:
-            mov al, player1 ; Get the player 1 symbol
             mov [bx], al ; Save the symbol
-            dec bx ; Move to the start of the cell container
-            jmp print_cell_value
+            sub bx , 3 ; Move to the start of the row header
 
-        player2_cell:
-            mov al, player2 ; Get the player 2 symbol
-            mov [bx], al ; Save the symbol
-            dec bx ; Move to the start of the cell container
-            jmp print_cell_value
-
-        print_cell_value:
-            mov dx, bx ; Print the cell
+            mov dx, bx ; Print the row header
             mov ah, 09h
             int 21h
 
-            inc bx ; Restore the cell container
-            mov al, 20 ; Space
-            mov [bx], al ; Save the space
-            dec bx ; Move to the start of the cell container
+            push cx ; Save the row counter
+            mov cx, boardDimension ; Counter to print the cells
 
-            inc di ; Next cell
-            loop print_cell
+        print_cell:
+            mov al, [di+gameBoard] ; Get the cell value
+            mov bx, offset cellContainer ; Get the cell container
+            inc bx ; Move to the symbol position
 
-            mPrint newLine ; Print the new line
+            cmp al, 0 ; Empty cell
+            je empty_cell
 
-            mPrint lineSeparator ; Print the line separator
+            cmp al, 1 ; Player 1
+            je player1_cell
 
-            pop cx ; Restore the row counter
-            loop print_line
+            cmp al, 2 ; Player 2
+            je player2_cell
+
+            empty_cell:
+                dec bx ; Move to the start of the cell container
+                jmp print_cell_value
+            
+            player1_cell:
+                mov al, player1 ; Get the player 1 symbol
+                mov [bx], al ; Save the symbol
+                dec bx ; Move to the start of the cell container
+                jmp print_cell_value
+
+            player2_cell:
+                mov al, player2 ; Get the player 2 symbol
+                mov [bx], al ; Save the symbol
+                dec bx ; Move to the start of the cell container
+                jmp print_cell_value
+
+            print_cell_value:
+                mov dx, bx ; Print the cell
+                mov ah, 09h
+                int 21h
+
+                inc bx ; Restore the cell container
+                mov al, 20 ; Space
+                mov [bx], al ; Save the space
+                dec bx ; Move to the start of the cell container
+
+                inc di ; Next cell
+                loop print_cell
+
+                mPrint newLine ; Print the new line
+
+                mPrint lineSeparator ; Print the line separator
+
+                pop cx ; Restore the row counter
+                loop print_line
 
 
-            mov al, 40 ; Restore the row header
-            mov bx, offset rowHeader
-            add bx, 3 ; Move to symbol position
-            mov [bx], al
-        
-            ret
+                mov al, 40 ; Restore the row header
+                mov bx, offset rowHeader
+                add bx, 3 ; Move to symbol position
+                mov [bx], al
+            
+                ret
+
+    someone_won:
+        cmp dl, 1 ; Player 1 won
+        je player1_won
+
+        ; player 2 won
+            mPrint player2Won
+            jmp initial_menu
+
+        player1_won:
+            mPrint player1Won
+            jmp initial_menu
+
+;  ------------------------ Game Commands ------------------------
+
+    game_command:
+        jmp end_game
+
+
+; ------------------------ Errors ------------------------
+    position_error:
+        mov dl, 1 ; Error
+        ret
+
+    invalid_position:
+        mPrint invalidPosition
+
+        call press_enter
+
+        jmp game_sequence
+
+    invalid_checker:
+        mPrint invalidChecker
+
+        call press_enter
+
+        jmp game_sequence
+
+    invalid_command:
+        mPrint invalidCommand
+
+        call press_enter
+
+        jmp game_sequence
+
+    invalid_destination:
+        mPrint invalidDestination
+        call press_enter
+        jmp game_sequence
+
+
 
 press_enter:
     mov AH, 08h                         ; Leer un caracter
