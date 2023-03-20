@@ -23,7 +23,11 @@ commandBuffer db 258 dup(0ff)
 
 boardFileName db "board.save", 0
 turnFileName db "turn.save", 0
+htmlFileName db "board.htm", 0
 handleSaveFile dw 0
+
+time db "00:00:00"
+timeSize equ $-time
 
 fileNameRequest db "Nombre del archivo : ", 0ah, 0dh, "$"
 fileCreated db 'Archivo creado', 0ah, 0dh, '$'
@@ -58,7 +62,7 @@ player2 db "W"
 
 ; Messages
 computingTurn db "Calculando turno...", 0ah, "$"
-generatingPage db "Generando pagina...", 0ah, "$"
+pageCreated db "Pagina creada", 0ah, "$"
 player1InitialTurn db "Empieza el jugador 1, con piezas >>B<<", 0dh, 0ah, "$"
 player2InitialTurn db "Empieza el jugador 2, con piezas >>W<<", 0dh, 0ah, "$"
 player1Won db "Gano el jugador 1, con piezas >>B<<", 0dh, 0ah, "$"
@@ -72,6 +76,22 @@ validCommand db "Comando valido", 0dh, 0ah, "$"
 invalidPosition db "Posicion invalida", 0dh, 0ah, "$"
 invalidChecker db "Pieza invalida", 0dh, 0ah, "$"
 invalidDestination db "Destino invalido", 0dh, 0ah, "$"
+
+
+; Page
+
+pageHeader db "<!DOCTYPE html>", 0ah, "<html>", 0ah, "<head>", 0ah, "<title>Tablero de Damas Chinas</title>", 0ah, "</head>", 0ah, "<body>", 0ah
+pageHeaderSize equ $-pageHeader
+
+hourHeader db "<h2> Hora de generacion: "
+hourHeaderSize equ $-hourHeader
+
+hourFooter db "</h2>", 0ah, "<table>", 0ah
+hourFooterSize equ $-hourFooter
+
+pageFooter db "</table>", 0ah, "</body>", 0ah, "</html>", 0ah
+pageFooterSize equ $-pageFooter
+
 .code
 
 .startup
@@ -117,7 +137,7 @@ load_game:
     mov [handleSaveFile], AX
     mov BX, AX
     mov DX, offset gameBoard
-    mov CX, 81
+    mov CX, 51
     mov AH, 3f
     int 21
 
@@ -953,7 +973,151 @@ game_sequence:
         jmp initial_menu
 
     generate_page:
-        jmp initial_menu
+
+        ; Generata .htm file
+        mov cx, 0
+        mov dx, offset htmlFileName
+        mov ah, 3ch
+        int 21h
+        jc initial_menu
+        mov [handleSaveFile], AX
+        mov bx, ax
+
+        ; Write the header
+        mov cx, pageHeaderSize
+        mov dx, offset pageHeader
+        mov ah, 40h
+        int 21h
+
+        ; Write the time
+
+        mov cx, hourHeaderSize
+        mov dx, offset hourHeader
+        mov ah, 40h
+        int 21h
+
+        call convert_hour_to_ascii
+        mov bx, [handleSaveFile]
+        mov cx, 8                   
+        mov dx, offset time
+        mov ah, 40h
+        int 21h
+
+        mov cx, hourFooterSize
+        mov dx, offset hourFooter
+        mov ah, 40h
+        int 21h
+
+        ; Write the board
+        ; todo
+
+        ; Write the footer
+        mov cx, pageFooterSize
+        mov dx, offset pageFooter
+        mov ah, 40h
+        int 21h
+
+        ; Close file
+        mov ah, 3eh
+        int 21h
+
+        mPrint newLine
+        mPrint pageCreated
+
+        call press_enter
+
+        jmp game_sequence
+
+    ; entry : none
+    ; output Saves in 'time' the current time as HH:MM:SS
+    convert_hour_to_ascii:
+        ; Get the time
+        mov ah, 2ch
+        int 21h
+        ; ch = hour, cl = minutes, dh = seconds, dl = hundredths of seconds
+
+        ; Convert the hour
+        mov al, ch
+        call convert_to_ascii
+        mov [time], bh
+        mov [time + 1], bl
+
+        mov [time + 2], 3a ; :
+
+        ; Convert the minutes
+        mov al, cl
+        call convert_to_ascii
+        mov [time + 3], bh
+        mov [time + 4], bl
+
+        mov [time + 5], 3a ; :
+
+        ; Convert the seconds
+        mov al, dh
+        call convert_to_ascii
+        mov [time + 6], bh
+        mov [time + 7], bl
+        
+        ret
+
+    ; entry : al = number to convert
+    ; output 'bh' the tens
+    ;        'bl' the units
+    get_digits:
+        mov bh, 0 ; tens
+        mov bl, 0 ; units
+
+        get_tens:
+            cmp al, 0ah
+            jl get_units
+            sub al, 0ah
+            inc bh
+            jmp get_tens
+
+        get_units:
+            mov bl, al
+            ret
+
+    ; entry : al = number to convert
+    ; output 'bh' the ascii code of the tens
+    ;        'bl' the ascii code of the units
+    convert_to_ascii:
+        call get_digits
+
+        add bh, 30h
+        add bl, 30h
+        ret
+
+    return_game:
+        mov cx, 0
+        mov dx, offset turnFileName
+        mov ah, 3dh
+        int 21h
+        jc initial_menu
+        mov [handleSaveFile], AX
+        mov bx, ax
+
+        mov cx, 1
+        mov dx, offset turn
+        mov ah, 42h
+        int 21h
+
+        mov [turn], al
+
+        mov cx, 0
+        mov dx, offset boardFileName
+        mov ah, 3dh
+        int 21h
+        jc initial_menu
+        mov [handleSaveFile], AX
+        mov bx, ax
+
+        mov cx, 51
+        mov dx, offset gameBoard
+        mov ah, 42h
+        int 21h
+
+        jmp game_sequence
 
 ; ------------------------ Errors ------------------------
     position_error:
