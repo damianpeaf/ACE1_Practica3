@@ -30,13 +30,13 @@ Variación del juego de damas chinas para 2 jugadores, desarrollado en ensamblad
 
 # ** Iinicio de la aplicación**
 
-![Inicio](./docs/user/img/Inicio.png)
+![Inicio](docs/user/img/Inicio.png)
 
 Se una pantalla con los datos del desarrollador y es posible acceder al menú principal presionando `Enter`.
 
 # **Menú Principal**
 
-![Menú Principal](./docs/user/img/MenuPrincipal.png)
+![Menú Principal](docs/user/img/MenuPrincipal.png)
 
 En el menú principal se puede seleccionar entre las siguientes opciones:
 - Iniciar Juego
@@ -45,13 +45,13 @@ En el menú principal se puede seleccionar entre las siguientes opciones:
 
 ## **Iniciar Juego**
 
-![Iniciar Juego](./docs/user/img/IniciarJuego.png)
+![Iniciar Juego](docs/user/img/IniciarJuego.png)
 
 Al seleccionar la opción `Iniciar Juego` se inicia una nueva partida.
 
 ## **Cargar Juego**
 
-![Cargar Juego](./docs/user/img/CargarJuego.png)
+![Cargar Juego](docs/user/img/CargarJuego.png)
 
 Al seleccionar la opción `Cargar Juego` se carga una partida guardada.
 
@@ -63,11 +63,11 @@ Esta opción cierra la aplicación.
 
 Al iniciar una partida se sortea el turno del jugador que inicia.
 
-![Juego](./docs/user/img/Sorteo.png)
+![Juego](docs/user/img/Sorteo.png)
 
 Luego del sorteo es posible presionar `Enter` para continuar.
 
-![Juego](./docs/user/img/Juego.png)
+![Juego](docs/user/img/Juego.png)
 
 Dentro de la partida se desplegará en la parte inferior el jugador que tiene el turno actual.
 
