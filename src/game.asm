@@ -86,11 +86,27 @@ pageHeaderSize equ $-pageHeader
 hourHeader db "<h2> Hora de generacion: "
 hourHeaderSize equ $-hourHeader
 
-hourFooter db "</h2>", 0ah, "<table>", 0ah
+hourFooter db "</h2>", 0ah, "<table border='1'>", 0ah
 hourFooterSize equ $-hourFooter
 
 pageFooter db "</table>", 0ah, "</body>", 0ah, "</html>", 0ah
 pageFooterSize equ $-pageFooter
+
+tableColumnHeaders db "<tr><th></th><th>1</th><th>2</th><th>3</th><th>4</th><th>5</th><th>6</th><th>7</th><th>8</th><th>9</th></tr>", 0ah
+tableColumnHeadersSize equ $-tableColumnHeaders
+
+tableRowHeaders db "<th>@</th>", 0ah
+tableRowHeadersSize equ $-tableRowHeaders
+
+trOpen db "<tr>", 0ah
+openTagSize equ $-trOpen
+tdOpen db "<td>", 0ah
+
+trClose db "</tr>", 0ah
+closeTagSize equ $-trClose
+tdClose db "</td>", 0ah
+blankSpace db " "
+
 
 .code
 
@@ -166,6 +182,8 @@ load_game:
     ;  close
     mov AH, 3e
     int 21
+
+    call press_enter                   ; Wait for enter
     jmp game_sequence
 
 start_game:
@@ -882,7 +900,7 @@ game_sequence:
     ;           di = offset string2
     ;   exit  : dl = 1 if the command is valid, 0 otherwise
     compare_strings:
-        mov cx, 0 ; Counter
+        mov cx, 0 ; TODO: Charge the counter
 
         compare:
             mov al, [si] ; Get the command char
@@ -895,7 +913,7 @@ game_sequence:
             inc di ; Next buffer char
             inc cx ; Next counter
 
-            cmp cx, 4 ; Check if the command is complete
+            cmp cx, 4 ; TODO: CHANGE TO CMP 0
             jne compare
 
             mov dl, 1 ; Strings are equal
@@ -1009,7 +1027,7 @@ game_sequence:
         int 21h
 
         ; Write the board
-        ; todo
+        call board_to_html
 
         ; Write the footer
         mov cx, pageFooterSize
@@ -1027,6 +1045,116 @@ game_sequence:
         call press_enter
 
         jmp game_sequence
+
+    board_to_html:
+
+        ; Write the table header
+        mov cx, tableColumnHeadersSize
+        mov dx, offset tableColumnHeaders
+        mov ah, 40h
+        int 21h
+
+        ; Write the table rows
+        mov di, 0 ; Cell counter
+        mov cx, boardDimension
+
+        write_table_line:
+            push cx ; Save the row counter
+
+            ; write opening tr
+            mov bx, [handleSaveFile]
+            mov cx, openTagSize
+            mov dx, offset trOpen
+            mov ah, 40h
+            int 21h
+
+            ; Write the row header
+            mov bx, offset tableRowHeaders
+            add bx, 4 ; Move to symbol position
+
+            mov al, [bx]
+            inc al ; next symbol
+
+            mov [bx], al ; Save the symbol
+
+            ; Write the row header
+            mov bx, [handleSaveFile]
+            mov cx, tableRowHeadersSize
+            mov dx, offset tableRowHeaders
+            mov ah, 40h
+            int 21h
+            mov cx, boardDimension
+
+            ; Write the row cells
+            write_table_cell: 
+                push cx ; Save the cell counter
+                
+                ; write opening td
+                mov bx, [handleSaveFile]
+                mov cx, openTagSize
+                mov dx, offset tdOpen
+                mov ah, 40h
+                int 21h
+
+                mov al, [di+gameBoard] ; Get the cell value
+
+                cmp al, 0 ; Empty cell
+                je write_empty_cell
+
+                cmp al, 1 ; Player 1
+                je write_player1_cell
+
+                cmp al, 2 ; Player 2
+                je write_player2_cell
+
+                jump_to_write_line:
+                    jmp write_table_line
+
+                write_empty_cell:
+                mov dx, offset blankSpace
+                jmp write_cell_value
+
+                write_player1_cell:
+                mov dx, offset player1
+                jmp write_cell_value
+
+                write_player2_cell:
+                mov dx, offset player2
+                jmp write_cell_value
+
+                write_cell_value:
+                    mov cx, 1
+                    mov bx, [handleSaveFile]
+                    mov ah, 40h
+                    int 21h
+
+                ; write closing td
+                mov bx, [handleSaveFile]
+                mov cx, closeTagSize
+                mov dx, offset tdClose
+                mov ah, 40h
+                int 21h
+
+                pop cx ; Restore the cell counter
+                inc di ; Next cell
+                loop write_table_cell ;; Write all the cells of the row
+
+                ; write closing tr
+                mov bx, [handleSaveFile]
+                mov cx, closeTagSize
+                mov dx, offset trClose
+                mov ah, 40h
+                int 21h
+
+                pop cx ; Restore the row counter
+                loop jump_to_write_line ;; Write all the rows of the table
+
+                mov al, 40 ; @
+                mov bx, offset tableRowHeaders
+                add bx, 4 ; Move to symbol position
+                mov [bx], al ; Save the symbol
+                mov bx, [handleSaveFile] ; Restore the file handle
+        ret
 
     ; entry : none
     ; output Saves in 'time' the current time as HH:MM:SS
