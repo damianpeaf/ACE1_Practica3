@@ -30,13 +30,13 @@ Variación del juego de damas chinas para 2 jugadores, desarrollado en ensamblad
 
 # ** Iinicio de la aplicación**
 
-![Inicio](https://gitlab.com/damianpeaf/ACE1-231S0778B202110568PRAC3/-/raw/883c7fc36d01e9dde0af1bfecfe6d13da3471fa5/docs/user/img/Inicio.png)
+![Inicio](https://gitlab.com/damianpeaf/ACE1-231S0778B202110568PRAC3/-/blob/7c47bacebc2d8367a7cb32947661cd4a02310cc2/docs/user/img/Inicio.PNG)
 
 Se una pantalla con los datos del desarrollador y es posible acceder al menú principal presionando `Enter`.
 
 # **Menú Principal**
 
-![Menú Principal](https://gitlab.com/damianpeaf/ACE1-231S0778B202110568PRAC3/-/raw/883c7fc36d01e9dde0af1bfecfe6d13da3471fa5/docs/user/img/MenuPrincipal.png)
+![Menú Principal](https://gitlab.com/damianpeaf/ACE1-231S0778B202110568PRAC3/-/blob/7c47bacebc2d8367a7cb32947661cd4a02310cc2/docs/user/img/MenuPrincipal.PNG)
 
 En el menú principal se puede seleccionar entre las siguientes opciones:
 - Iniciar Juego
@@ -45,13 +45,13 @@ En el menú principal se puede seleccionar entre las siguientes opciones:
 
 ## **Iniciar Juego**
 
-![Iniciar Juego](https://gitlab.com/damianpeaf/ACE1-231S0778B202110568PRAC3/-/raw/883c7fc36d01e9dde0af1bfecfe6d13da3471fa5/docs/user/img/IniciarJuego.png)
+![Iniciar Juego](https://gitlab.com/damianpeaf/ACE1-231S0778B202110568PRAC3/-/blob/7c47bacebc2d8367a7cb32947661cd4a02310cc2/docs/user/img/IniciarJuego.PNG)
 
 Al seleccionar la opción `Iniciar Juego` se inicia una nueva partida.
 
 ## **Cargar Juego**
 
-![Cargar Juego](https://gitlab.com/damianpeaf/ACE1-231S0778B202110568PRAC3/-/raw/883c7fc36d01e9dde0af1bfecfe6d13da3471fa5/docs/user/img/CargarJuego.png)
+![Cargar Juego](https://gitlab.com/damianpeaf/ACE1-231S0778B202110568PRAC3/-/blob/883c7fc36d01e9dde0af1bfecfe6d13da3471fa5/docs/user/img/CargarJuego.PNG)
 
 Al seleccionar la opción `Cargar Juego` se carga una partida guardada.
 
@@ -63,11 +63,12 @@ Esta opción cierra la aplicación.
 
 Al iniciar una partida se sortea el turno del jugador que inicia.
 
-![Juego](https://gitlab.com/damianpeaf/ACE1-231S0778B202110568PRAC3/-/raw/883c7fc36d01e9dde0af1bfecfe6d13da3471fa5/docs/user/img/Sorteo.png)
+![Juego](https://gitlab.com/damianpeaf/ACE1-231S0778B202110568PRAC3/-/blob/7c47bacebc2d8367a7cb32947661cd4a02310cc2/docs/user/img/Juego.PNG)
+
+![Juego](https://gitlab.com/damianpeaf/ACE1-231S0778B202110568PRAC3/-/blob/7c47bacebc2d8367a7cb32947661cd4a02310cc2/docs/user/img/Sorteo.PNG)
 
 Luego del sorteo es posible presionar `Enter` para continuar.
 
-![Juego](https://gitlab.com/damianpeaf/ACE1-231S0778B202110568PRAC3/-/raw/883c7fc36d01e9dde0af1bfecfe6d13da3471fa5/docs/user/img/Juego.png)
 
 Dentro de la partida se desplegará en la parte inferior el jugador que tiene el turno actual.
 
